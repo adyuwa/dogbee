@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>保護狗狗遊戲</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            border: 2px solid black;
+        }
+        #message, #timer, #level, #score {
+            font-size: 24px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .button-container {
+            margin-top: 20px;
+        }
+        .button-container button {
+            font-size: 18px;
+            padding: 10px 20px;
+            margin: 0 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="timer">60</div>
+    <div id="level">Level: 1</div>
+    <div id="score">Score: 0</div>
+    <div id="message"></div>
+    <div class="button-container">
+        <button id="startButton">Start</button>
+        <button id="restartButton">Restart</button>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const timerDiv = document.getElementById('timer');
+        const levelDiv = document.getElementById('level');
+        const scoreDiv = document.getElementById('score');
+        const messageDiv = document.getElementById('message');
+        const startButton = document.getElementById('startButton');
+        const restartButton = document.getElementById('restartButton');
+
+        let gameWidth = window.innerWidth * 0.8;
+        let gameHeight = window.innerHeight * 0.8;
+        canvas.width = gameWidth;
+        canvas.height = gameHeight;
+
+        let dog, bees, paths, drawing, startTime, gameDuration, gameOver, win, level, score, gameStarted;
+
+        function initGame() {
+            dog = {
+                x: Math.random() * (gameWidth - 50),
+                y: Math.random() * (gameHeight - 50),
+                width: 50,
+                height: 50
+            };
+
+            bees = [];
+            bees.push(createBee());
+
+            paths = [];
+            drawing = false;
+            startTime = Date.now();
+            gameDuration = 60000; // 60 seconds
+            gameOver = false;
+            win = false;
+            level = 1;
+            score = 0;
+            gameStarted = false;
+
+            timerDiv.textContent = '60';
+            levelDiv.textContent = 'Level: 1';
+            scoreDiv.textContent = 'Score: 0';
+            messageDiv.textContent = '';
+        }
+
+        function createBee() {
+            return {
+                x: Math.random() * (gameWidth - 20),
+                y: Math.random() * (gameHeight - 20),
+                width: 20,
+                height: 20,
+                dx: 2 * (Math.random() > 0.5 ? 1 : -1),
+                dy: 2 * (Math.random() > 0.5 ? 1 : -1)
+            };
+        }
+
+        initGame();
+
+        function resizeCanvas() {
+            gameWidth = window.innerWidth * 0.6;
+            gameHeight = window.innerHeight * 0.6;
+            canvas.width = gameWidth;
+            canvas.height = gameHeight;
+            initGame(); // 重新初始化遊戲，以避免畫面大小變化後的問題
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function drawDog() {
+            ctx.fillStyle = 'brown';
+            ctx.fillRect(dog.x, dog.y, dog.width, dog.height);
+        }
+
+        function drawBees() {
+            ctx.fillStyle = 'yellow';
+            for (let bee of bees) {
+                ctx.fillRect(bee.x, bee.y, bee.width, bee.height);
+            }
+        }
+
+        function drawPaths() {
+            ctx.strokeStyle = 'blue';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            for (let path of paths) {
+                ctx.moveTo(path[0].x, path[0].y);
+                for (let point of path) {
+                    ctx.lineTo(point.x, point.y);
+                }
+            }
+            ctx.stroke();
+        }
+
+        function lineIntersectsRect(x1, y1, x2, y2, rx, ry, rw, rh) {
+            // Check if any of the corners of the rectangle are within the line segment
+            const left = lineIntersectsLine(x1, y1, x2, y2, rx, ry, rx, ry + rh);
+            const right = lineIntersectsLine(x1, y1, x2, y2, rx + rw, ry, rx + rw, ry + rh);
+            const top = lineIntersectsLine(x1, y1, x2, y2, rx, ry, rx + rw, ry);
+            const bottom = lineIntersectsLine(x1, y1, x2, y2, rx, ry + rh, rx + rw, ry + rh);
+
+            return left || right || top || bottom;
+        }
+
+        function lineIntersectsLine(x1, y1, x2, y2, x3, y3, x4, y4) {
+            const uA = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) /
+                       ((y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1));
+            const uB = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) /
+                       ((y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1));
+
+            if (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1) {
+                return true;
+            }
+            return false;
+        }
+
+        function updateBees() {
+            for (let bee of bees) {
+                bee.x += bee.dx;
+                bee.y += bee.dy;
+
+                if (Math.random() < 0.01) {  // 隨機改變方向
+                    bee.dx = bee.dx < 0 ? -2 * level * (Math.random() + 0.5) : 2 * level * (Math.random() + 0.5);
+                    bee.dy = bee.dy < 0 ? -2 * level * (Math.random() + 0.5) : 2 * level * (Math.random() + 0.5);
+                }
+
+                if (bee.x < 0 || bee.x + bee.width > gameWidth) {
+                    bee.dx = -bee.dx;
+                }
+                if (bee.y < 0 || bee.y + bee.height > gameHeight) {
+                    bee.dy = -bee.dy;
+                }
+
+                for (let path of paths) {
+                    for (let i = 0; i < path.length - 1; i++) {
+                        let p1 = path[i];
+                        let p2 = path[i + 1];
+                        if (lineIntersectsRect(p1.x, p1.y, p2.x, p2.y, bee.x, bee.y, bee.width, bee.height)) {
+                            // 更改蜜蜂的方向
+                            if (Math.abs(p2.x - p1.x) > Math.abs(p2.y - p1.y)) {
+                                bee.dy = -bee.dy;
+                            } else {
+                                bee.dx = -bee.dx;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (bee.x < dog.x + dog.width && bee.x + bee.width > dog.x &&
+                    bee.y < dog.y + dog.height && bee.y + bee.height > dog.y) {
+                    gameOver = true;
+                    win = false;
+                    messageDiv.textContent = "LOSE";
+                }
+            }
+        }
+
+        function draw() {
+            if (!gameStarted || gameOver) return;
+
+            ctx.clearRect(0, 0, gameWidth, gameHeight);
+            drawDog();
+            drawBees();
+            drawPaths();
+
+            updateBees();
+
+            if (Date.now() - startTime > gameDuration) {
+                win = true;
+                gameOver = true;
+                messageDiv.textContent = "WIN";
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (!gameStarted || gameOver) return;
+            drawing = true;
+            paths.push([{ x: e.offsetX, y: e.offsetY }]);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (drawing && gameStarted && !gameOver) {
+                let path = paths[paths.length - 1];
+                path.push({ x: e.offsetX, y: e.offsetY });
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            drawing = false;
+        });
+
+        function updateTimer() {
+            if (!gameStarted || gameOver) return;
+
+            let timeLeft = Math.max(0, Math.ceil((gameDuration - (Date.now() - startTime)) / 1000));
+            timerDiv.textContent = timeLeft;
+
+            if (timeLeft > 0) {
+                setTimeout(updateTimer, 1000);
+            } else {
+                if (win) {
+                    levelUp();
+                }
+            }
+        }
+
+        function updateScore() {
+            if (!gameStarted || gameOver) return;
+
+            score += 1;
+            scoreDiv.textContent = 'Score: ' + score;
+
+            setTimeout(updateScore, 6000);
+        }
+
+        function levelUp() {
+            level++;
+            levelDiv.textContent = 'Level: ' + level;
+            bees.push(createBee()); // 添加一只新的蜜蜂
+            dog.x = Math.random() * (gameWidth - dog.width);
+            dog.y = Math.random() * (gameHeight - dog.height);
+            startTime = Date.now();
+            gameOver = false;
+            win = false;
+            paths = [];
+            updateTimer();
+            updateScore();
+            draw();
+            checkGameStatus(); // 在 levelUp 之後重新開始 checkGameStatus
+        }
+
+        function startGame() {
+            if (gameStarted) return;
+            gameStarted = true;
+            startTime = Date.now();
+            updateTimer();
+            updateScore();
+            draw();
+            checkGameStatus(); // 在 startGame 之後啟動 checkGameStatus
+        }
+
+        function restartGame() {
+            initGame();
+            gameStarted = false;
+            checkGameStatus(); // 在 restartGame 之後重新開始 checkGameStatus
+        }
+
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', restartGame);
+
+        function checkGameStatus() {
+            if (gameOver) {
+                messageDiv.textContent = win ? "WIN" : "LOSE";
+                if (win) {
+                    setTimeout(levelUp, 2000);
+                }
+            } else {
+                requestAnimationFrame(checkGameStatus);
+            }
+        }
+
+        checkGameStatus();
+    </script>
+</body>
+</html>
